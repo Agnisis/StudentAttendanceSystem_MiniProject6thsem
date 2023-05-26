@@ -1,0 +1,173 @@
+COMPONENTS:-
+
+NODE MCU ESP8266
+RFID READER
+RFID TAGS
+BUZZER
+JUMPER WIRES
+BREAD BOARD 
+
+GOOGLE SHEETS 
+
+
+WEB APP -> 
+LOGIN & REGISTER 
+UI - DATE TIME NAME 
+
+
+DATABASE :- SQL
+
+
+
+WIFI CREDENTIALS : REDMI 
+PASSWORD : 1234567890     CONNECT TO MOBILE NET ONLY
+
+
+
+
+STEPS :- 
+
+
+1.CKT MAKING
+2.READING DATA RFID NEW DATA :-
+ TRY TO INCLUDE  (DATA TIMEIN NAME ROLL DEPT YEAR SEC) 
+3.RFID SCANNER MAIN CODE -> SCAN RFID -> GET DATA TO SHEET -> SERVO ON -> DISPLAY ON WEBSITE 
+
+
+
+
+
+FULL SETUP:-
+
+MODEL
+WEBSITE ON LAPTOP
+PPT REPORT 
+
+
+
+
+CODE WITH SERVO
+
+
+
+
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <Servo.h>
+
+//-----------------------------------------
+#define RST_PIN  D3
+#define SS_PIN   D4
+#define SERVO_PIN D2
+//-----------------------------------------
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+MFRC522::MIFARE_Key key;  
+MFRC522::StatusCode status;      
+//-----------------------------------------
+int blockNum = 2;
+byte bufferLen = 18;
+byte readBlockData[18];
+//-----------------------------------------
+String card_holder_name;
+const char* script_id = "YOUR_SCRIPT_ID";
+const char* script_host = "script.google.com";
+const int script_port = 80;
+//-----------------------------------------
+#define WIFI_SSID "ENTER_YOUR_WIFI_SSID"
+#define WIFI_PASSWORD "ENTER_YOUR_WIFI_PASSWORD"
+//-----------------------------------------
+Servo servoMotor;
+
+void setup()
+{
+  Serial.begin(9600);
+  
+  pinMode(SERVO_PIN, OUTPUT);
+  servoMotor.attach(SERVO_PIN);
+
+  Serial.print("Connecting to WiFi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.println("WiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+  
+  SPI.begin();
+}
+
+void loop()
+{
+  mfrc522.PCD_Init();
+
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  Serial.println();
+  Serial.println("Reading last data from RFID...");
+  ReadDataFromBlock(blockNum, readBlockData);
+  
+  Serial.println();
+  Serial.print("Last data in RFID:");
+  Serial.print(blockNum);
+  Serial.print(" --> ");
+  for (int j = 0; j < 16; j++) {
+    Serial.write(readBlockData[j]);
+  }
+  Serial.println();
+  
+  servoMotor.write(90);
+  delay(500);
+  servoMotor.write(0);
+  delay(500);
+
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClient client;
+    if (client.connect(script_host, script_port)) {
+      String url = "/macros/s/" + String(script_id) + "/exec?card_holder_name=" + String((char*)readBlockData);
+      client.println("GET " + url + " HTTP/1.1");
+      client.println("Host: " + String(script_host));
+      client.println("Connection: close");
+      client.println();
+    } else {
+      Serial.println("Connection to GAS failed");
+    }
+
+    while (client.connected()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        Serial.println(line);
+      }
+    }
+  }
+}
+
+void ReadDataFromBlock(int blockNum, byte readBlockData[])
+{
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+  
+  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockNum, &key, &(mfrc522.uid));
+
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print("Authentication failed for Read: ");
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    return;
+  } else {
+    Serial.println("Authentication success");
+  }
+  
+  status = mfrc522
